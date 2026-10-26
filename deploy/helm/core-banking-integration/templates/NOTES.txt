@@ -1,0 +1,20 @@
+Core Banking Integration is installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Open the API on your machine:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "cbi.fullname" . }}-integration 8080:{{ .Values.integration.service.port }}
+  curl -s localhost:8080/health/ready
+
+Then run the smoke test:
+
+  BASE_URL=http://localhost:8080 API_KEY=<your service api key> scripts/smoke.sh
+{{- if .Values.mockCore.enabled }}
+
+Break the mock core on purpose (fault injection):
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "cbi.fullname" . }}-mock-core 8081:{{ .Values.mockCore.service.port }}
+  curl -s -X POST -H "X-API-Key: <core api key>" -H "Content-Type: application/json" \
+       -d '{"fail_next": 3}' localhost:8081/admin/faults
+{{- end }}
+
+Remember: the integration keeps transfers in memory, so it runs as a single replica for now.

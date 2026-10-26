@@ -1,0 +1,255 @@
+openapi: 3.1.0
+info:
+  title: Core Banking Integration
+  version: 0.1.0
+  description: |
+    Public contract of the integration service. Contract-first: this file is written BEFORE
+    the code, and tests/contract checks that the running app still honours it.
+
+    Rules worth remembering:
+    - Money is always a decimal STRING with 2 places ("100.00"), never a JSON float.
+    - POST /v1/transfers needs an `Idempotency-Key` header. Same key + same body = same transfer.
+    - A transfer can be PENDING when we do not know the outcome yet. Poll GET /v1/transfers/{id}.
+servers:
+  - url: http://localhost:8080
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /v1/accounts/{account_id}/balance:
+    get:
+      operationId: getBalance
+      summary: Get the balance of an account
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Current balance
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Balance" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/accounts/{account_id}/statement:
+    get:
+      operationId: getStatement
+      summary: Get the statement of an account for a period (maximum 92 days)
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Transactions in the period
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Statement" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/transfers:
+    post:
+      operationId: createTransfer
+      summary: Create a transfer (idempotent)
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique per intended transfer. Reuse it to retry safely.
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransferRequest" }
+      responses:
+        "201":
+          description: Created and the final outcome is known. Read `status` (CONFIRMED or FAILED).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transfer" }
+        "202":
+          description: Accepted but the outcome is not known yet (status PENDING).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transfer" }
+        "200":
+          description: Replay. The Idempotency-Key was already used with the same body.
+          headers:
+            Idempotent-Replayed:
+              schema: { type: string, enum: ["true"] }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transfer" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422":
+          description: Validation error, or the Idempotency-Key was reused with a different body.
+          content:
+            application/json:
+              schema: {}
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /v1/transfers/{transfer_id}:
+    get:
+      operationId: getTransfer
+      summary: Get a transfer
+      parameters:
+        - name: transfer_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The transfer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transfer" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /internal/reconcile:
+    post:
+      operationId: reconcilePendingTransfers
+      summary: Resolve PENDING transfers by asking the core what really happened
+      parameters:
+        - name: min_age_seconds
+          in: query
+          required: false
+          schema: { type: number, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Report of the run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconcileReport" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /health/live:
+    get:
+      operationId: liveness
+      summary: Liveness probe
+      security: []
+      responses:
+        "200": { description: Process is alive }
+
+  /health/ready:
+    get:
+      operationId: readiness
+      summary: Readiness probe (also shows the circuit breaker state)
+      security: []
+      responses:
+        "200": { description: Ready to receive traffic }
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    AccountId:
+      name: account_id
+      in: path
+      required: true
+      schema: { type: string, pattern: "^\\d{10}$" }
+
+  responses:
+    Problem:
+      description: Error (RFC 9457 problem details)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: string, pattern: "^\\d+\\.\\d{2}$", example: "100.00" }
+        currency: { type: string, pattern: "^[A-Z]{3}$", example: BRL }
+
+    Balance:
+      type: object
+      required: [account_id, available, ledger]
+      properties:
+        account_id: { type: string }
+        available: { $ref: "#/components/schemas/Money" }
+        ledger: { $ref: "#/components/schemas/Money" }
+
+    Transaction:
+      type: object
+      required: [id, kind, amount, booked_on, description]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [CREDIT, DEBIT] }
+        amount: { $ref: "#/components/schemas/Money" }
+        booked_on: { type: string, format: date }
+        description: { type: string }
+
+    Statement:
+      type: object
+      required: [account_id, period_start, period_end, transactions]
+      properties:
+        account_id: { type: string }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        transactions:
+          type: array
+          items: { $ref: "#/components/schemas/Transaction" }
+
+    TransferRequest:
+      type: object
+      required: [source_account, destination_account, amount]
+      properties:
+        source_account: { type: string, pattern: "^\\d{10}$" }
+        destination_account: { type: string, pattern: "^\\d{10}$" }
+        amount: { type: string, pattern: "^\\d+\\.\\d{2}$", example: "100.00" }
+        currency: { type: string, pattern: "^[A-Z]{3}$", default: BRL }
+
+    Transfer:
+      type: object
+      required: [id, status, source_account, destination_account, amount, created_at, updated_at]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [PENDING, CONFIRMED, FAILED] }
+        source_account: { type: string }
+        destination_account: { type: string }
+        amount: { $ref: "#/components/schemas/Money" }
+        failure_code: { type: [string, "null"] }
+        failure_reason: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ReconcileReport:
+      type: object
+      required: [examined, confirmed, failed, still_pending, resubmitted]
+      properties:
+        examined: { type: integer }
+        confirmed: { type: integer }
+        failed: { type: integer }
+        still_pending: { type: integer }
+        resubmitted: { type: integer }
+
+    Problem:
+      type: object
+      required: [title, status, detail, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string }
+        request_id: { type: [string, "null"] }

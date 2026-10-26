@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cbi.fullname" . }}-integration
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: integration
+spec:
+  replicas: {{ .Values.integration.replicaCount }}
+  # In-memory state: never run the old and the new pod at the same time.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "cbi.selectorLabels" (dict "root" . "component" "integration") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cbi.selectorLabels" (dict "root" . "component" "integration") | nindent 8 }}
+      {{- if not .Values.secrets.existingSecret }}
+      annotations:
+        # Roll the pod when the chart-managed secret changes.
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      {{- end }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: integration
+          image: "{{ .Values.integration.image.repository }}:{{ .Values.integration.image.tag }}"
+          imagePullPolicy: {{ .Values.integration.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: CBI_CORE_BASE_URL
+              value: {{ include "cbi.coreBaseUrl" . | quote }}
+            - name: CBI_CORE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cbi.secretName" . }}
+                  key: core-api-key
+            - name: CBI_SERVICE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cbi.secretName" . }}
+                  key: service-api-key
+            - name: CBI_CORE_TIMEOUT_SECONDS
+              value: {{ .Values.integration.config.coreTimeoutSeconds | quote }}
+            - name: CBI_READ_MAX_ATTEMPTS
+              value: {{ .Values.integration.config.readMaxAttempts | quote }}
+            - name: CBI_WRITE_MAX_ATTEMPTS
+              value: {{ .Values.integration.config.writeMaxAttempts | quote }}
+            - name: CBI_BREAKER_FAILURE_THRESHOLD
+              value: {{ .Values.integration.config.breakerFailureThreshold | quote }}
+            - name: CBI_BREAKER_RECOVERY_SECONDS
+              value: {{ .Values.integration.config.breakerRecoverySeconds | quote }}
+            - name: CBI_RECONCILE_INTERVAL_SECONDS
+              value: {{ .Values.integration.config.reconcileIntervalSeconds | quote }}
+            - name: CBI_RECONCILE_MIN_AGE_SECONDS
+              value: {{ .Values.integration.config.reconcileMinAgeSeconds | quote }}
+            - name: CBI_LOG_LEVEL
+              value: {{ .Values.integration.config.logLevel | quote }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.integration.resources | nindent 12 }}

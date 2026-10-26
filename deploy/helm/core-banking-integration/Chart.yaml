@@ -1,0 +1,6 @@
+apiVersion: v2
+name: core-banking-integration
+description: Integration service in front of a (mock) core banking system, plus the mock itself
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

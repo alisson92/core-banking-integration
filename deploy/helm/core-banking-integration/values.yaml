@@ -1,0 +1,57 @@
+nameOverride: ""
+fullnameOverride: ""
+
+integration:
+  image:
+    repository: cbi/integration
+    tag: dev
+    pullPolicy: IfNotPresent
+  # Keep this at 1. Transfers and idempotency keys live in memory (docs/adr/0002),
+  # so two pods would each have their own, different view of the world.
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 8080
+  config:
+    coreTimeoutSeconds: "2.0"
+    readMaxAttempts: "3"
+    writeMaxAttempts: "2"
+    breakerFailureThreshold: "5"
+    breakerRecoverySeconds: "30"
+    reconcileIntervalSeconds: "60"
+    reconcileMinAgeSeconds: "30"
+    logLevel: INFO
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      memory: 256Mi
+
+mockCore:
+  enabled: true
+  image:
+    repository: cbi/mock-core
+    tag: dev
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8081
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+core:
+  # URL of the core banking system. Empty means: use the mock core deployed by this chart.
+  baseUrl: ""
+
+secrets:
+  # LAB ONLY: values in a values file end up in Git and in the Helm release history.
+  # In real life use External Secrets, Vault or Sealed Secrets and set `existingSecret`.
+  serviceApiKey: dev-service-key
+  coreApiKey: core-dev-key
+  # Name of a Secret you manage yourself, with the keys `service-api-key` and `core-api-key`.
+  existingSecret: ""

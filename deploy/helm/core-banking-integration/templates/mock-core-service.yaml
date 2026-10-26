@@ -1,0 +1,17 @@
+{{- if .Values.mockCore.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cbi.fullname" . }}-mock-core
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mock-core
+spec:
+  type: {{ .Values.mockCore.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.mockCore.service.port }}
+      targetPort: http
+  selector:
+    {{- include "cbi.selectorLabels" (dict "root" . "component" "mock-core") | nindent 4 }}
+{{- end }}

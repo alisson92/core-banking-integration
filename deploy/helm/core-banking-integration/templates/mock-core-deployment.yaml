@@ -1,0 +1,62 @@
+{{- if .Values.mockCore.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cbi.fullname" . }}-mock-core
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mock-core
+spec:
+  # The mock keeps its ledger in memory, so it must stay a single replica.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "cbi.selectorLabels" (dict "root" . "component" "mock-core") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cbi.selectorLabels" (dict "root" . "component" "mock-core") | nindent 8 }}
+      {{- if not .Values.secrets.existingSecret }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      {{- end }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mock-core
+          image: "{{ .Values.mockCore.image.repository }}:{{ .Values.mockCore.image.tag }}"
+          imagePullPolicy: {{ .Values.mockCore.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8081
+          env:
+            - name: CORE_MOCK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cbi.secretName" . }}
+                  key: core-api-key
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.mockCore.resources | nindent 12 }}
+{{- end }}

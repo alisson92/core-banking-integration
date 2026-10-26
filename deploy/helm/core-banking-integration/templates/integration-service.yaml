@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cbi.fullname" . }}-integration
+  labels:
+    {{- include "cbi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: integration
+spec:
+  type: {{ .Values.integration.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.integration.service.port }}
+      targetPort: http
+  selector:
+    {{- include "cbi.selectorLabels" (dict "root" . "component" "integration") | nindent 4 }}
