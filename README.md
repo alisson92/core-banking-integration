@@ -66,8 +66,8 @@ docs/                       architecture, ADRs, roadmap, learning guide (in Port
 ## Status
 
 Works and is tested: the whole Python service, the mock core, and the tests.
-**Not run yet:** the Dockerfile, the Kind config and the Helm chart were syntax-checked only.
-Run `make helm-lint` and `make helm-template` first on your machine.
+The Docker images, the Kind cluster and the Helm chart were validated end to end
+(Docker 29, Kind 0.30 / Kubernetes 1.34, Helm 4.3): `make smoke` passes against the release.
 
 ## Known limitations
 

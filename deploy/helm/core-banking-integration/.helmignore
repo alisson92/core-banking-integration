@@ -1,0 +1,14 @@
+# Files Helm must not package or lint (same syntax as .gitignore).
+# VCS and editor files
+.git/
+.gitignore
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+.vscode/
+.idea/
+# OS metadata (macOS, and Windows "Mark of the Web" files copied into WSL)
+.DS_Store
+*Zone.Identifier

@@ -25,10 +25,10 @@ Chaves de desenvolvimento: nosso serviço `dev-service-key`, mock do core `core-
 
 ## 2. Kind + Helm
 
-> Nota: os arquivos de container e do chart foram escritos e tiveram a sintaxe conferida, mas
-> ainda **não foram executados** (o ambiente onde foram criados não tinha Docker, Kind nem Helm).
-> Ao rodar pela primeira vez, leia os erros com calma: é parte do aprendizado e vale registrar
-> no `CLAUDE.md`.
+> Validado em 2026-10-26 com Docker 29, Kind 0.30 (Kubernetes 1.34) e Helm 4.3.
+> Os targets de cluster do `Makefile` usam sempre o contexto `kind-cbi-lab` (variável
+> `KUBE_CONTEXT`), nunca o contexto ativo do kubectl: isso evita instalar o lab por engano
+> em outro cluster (por exemplo, um EKS de produção).
 
 Pré-requisitos: Docker, Kind, kubectl e Helm instalados.
 

@@ -48,11 +48,11 @@ make helm-template  # then helm-dry-run, THEN helm-install
 - In-memory repository: restart loses transfers; chart runs 1 replica with `Recreate`.
 - Static API keys (dev defaults, lab only).
 - Reconciliation has no row locking (needs a database).
-- Docker, Kind and Helm files have NOT been executed yet (syntax-checked only).
 
 ## Next steps (see docs/roadmap.md)
 
-1. Run `make docker-build`, `kind-up`, `kind-load`, `helm-lint`, `helm-template`, `helm-dry-run`, `helm-install`, `smoke` and fix whatever breaks.
+1. Fail closed on default API keys (security review finding): refuse to start with the
+   built-in keys unless a dev flag is set; Helm `required` for secrets; new ADR.
 2. Phase 3: PostgreSQL repository (`UNIQUE` idempotency key, Alembic, `FOR UPDATE SKIP LOCKED`), then 2+ replicas.
 3. Phase 5: OpenTelemetry traces, SLOs, alerts.
 
@@ -66,3 +66,12 @@ make helm-template  # then helm-dry-run, THEN helm-install
 - Verified: tests, ruff, both services over real HTTP with curl (including a real 2 s timeout
   after commit, resolved by the duplicate-reference path).
 - Not verified: Docker build, Kind, Helm (no daemon or binaries in the build environment).
+
+### 2026-10-26: Git repo + Docker/Kind/Helm validation
+- Repo pushed to github.com/alisson92/core-banking-integration (`main`).
+- Validated: `docker-build`, `kind-up`, `kind-load`, `helm-lint`, `helm-template`,
+  `helm-dry-run`, `helm-install` (Helm 4.3, Kubernetes 1.34) and `smoke` through port-forward.
+  `readOnlyRootFilesystem` works; 0 restarts.
+- Fixed: Windows `*:Zone.Identifier` files broke `helm lint` (added `.helmignore`);
+  Makefile cluster targets now pin `KUBE_CONTEXT` (default `kind-cbi-lab`).
+- Open: default API keys are fail-open; uvicorn access log duplicates the JSON access log.
