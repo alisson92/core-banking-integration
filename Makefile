@@ -2,6 +2,9 @@
 
 PYTHON       ?= python3
 KIND_CLUSTER ?= cbi-lab
+# Pin every cluster command to the Kind context, so a Makefile target never hits whatever
+# context happens to be active (for example a production EKS cluster).
+KUBE_CONTEXT ?= kind-$(KIND_CLUSTER)
 NAMESPACE    ?= cbi
 RELEASE      ?= cbi
 IMAGE_TAG    ?= dev
@@ -58,16 +61,16 @@ helm-template: ## Render the chart locally (no cluster needed). Read the output 
 	helm template $(RELEASE) $(CHART) --namespace $(NAMESPACE)
 
 helm-dry-run: ## Ask the cluster to validate the install without changing anything
-	helm upgrade --install $(RELEASE) $(CHART) --namespace $(NAMESPACE) --create-namespace --dry-run=server
+	helm upgrade --install $(RELEASE) $(CHART) --namespace $(NAMESPACE) --create-namespace --dry-run=server --kube-context $(KUBE_CONTEXT)
 
 helm-install: ## Install or upgrade the release (run helm-dry-run first!)
-	helm upgrade --install $(RELEASE) $(CHART) --namespace $(NAMESPACE) --create-namespace --wait
+	helm upgrade --install $(RELEASE) $(CHART) --namespace $(NAMESPACE) --create-namespace --wait --kube-context $(KUBE_CONTEXT)
 
 helm-uninstall: ## Remove the release
-	helm uninstall $(RELEASE) --namespace $(NAMESPACE)
+	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --kube-context $(KUBE_CONTEXT)
 
 port-forward: ## Expose the integration service on localhost:8080
-	kubectl -n $(NAMESPACE) port-forward svc/$(RELEASE)-core-banking-integration-integration 8080:8080
+	kubectl --context $(KUBE_CONTEXT) -n $(NAMESPACE) port-forward svc/$(RELEASE)-core-banking-integration-integration 8080:8080
 
 kind-down: ## Delete the Kind cluster (needs CONFIRM=yes)
 	@test "$(CONFIRM)" = "yes" || { echo "This deletes the cluster $(KIND_CLUSTER). Run: make kind-down CONFIRM=yes"; exit 1; }
